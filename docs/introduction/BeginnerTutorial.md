@@ -134,7 +134,8 @@ function render() {
 import { delay } from 'redux-saga'
 import { put,takeEvery } from 'redux-saga/effects'
 
-
+// 一个工具函数：返回一个 Promise，这个 Promise 将在 1 秒后 resolve
+//delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 // Our worker Saga: 将异步执行 increment 任务
 export function* incrementAsync() {
   yield delay(1000)
@@ -147,16 +148,18 @@ export function* watchIncrementAsync() {
 }
 ```
 
-好吧，该解释一下了。首先我们创建一个工具函数 `delay`，用于返回一个延迟 1 秒再 resolve 的 Promise。
+好吧，该解释一下了。
+
+首先我们引入一个工具函数 `delay`，用于返回一个延迟 1 秒再 resolve 的 Promise。
 我们将使用这个函数去 *阻塞* Generator。
 
-Sagas 被实现为 Generator 函数，它 yield 对象到 redux-saga middleware。
+Sagas 被实现为 [生成器 函数](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/function*)，它 yield 对象到 redux-saga middleware。
 被 yield 的对象都是一类指令，指令可被 middleware 解释执行。当 middleware 取得一个 yield 后的 Promise，middleware 会暂停 Saga，直到 Promise 完成。
 在上面的例子中，`incrementAsync` 这个 Saga 会暂停直到 `delay` 返回的 Promise 被 resolve，这个 Promise 将在 1 秒后 resolve。
 
-一旦 Promise 被 resolve，middleware 会恢复 Saga 去执行下一个语句（更准确地说是执行下面所有的语句，直到下一个 yield）。
+一旦 Promise 被 resolve，middleware 会恢复 Saga ,继续去执行下面的语句，直到下一个 yield。
 在我们的情况里，下一个语句是另一个 yield 后的对象：调用 `put({type: 'INCREMENT'})` 的结果。
-意思是 Saga 指示 middleware 发起一个 `INCREMENT` 的 action。
+意思是 Saga 指示 middleware 派发一个 `INCREMENT` 的 action。
 
 `put` 就是我们所说的一个调用 *Effect* 的例子。Effect 是一些简单 Javascript 对象，对象包含了要被 middleware 执行的指令。
 当 middleware 拿到一个被 Saga yield 后的 Effect，它会暂停 Saga，直到 Effect 执行完成，然后 Saga 会再次被恢复。
@@ -166,22 +169,51 @@ Sagas 被实现为 Generator 函数，它 yield 对象到 redux-saga middleware�
 接下来，我们创建了另一个 Saga `watchIncrementAsync`。这个 Saga 将监听所有发起的 `INCREMENT_ASYNC` action，并在每次 action 被匹配时派生一个新的 `incrementAsync` 任务。
 为了实现这个目的，我们使用一个辅助函数 `takeEvery` 来执行以上的处理过程。
 
-在我们开始这个应用之前，我们需要将 `watchIncrementAsync` 这个 Saga 连接至 Store：
+现在我们有了两个Sagas，我们需要立即同时执行他们两个，为此，我们需要添加一个负责启动其他Sagas的`rootSaga`，我们需要重构`sagas.js`
 
 ```javascript
 
-//...
-import { helloSaga, watchIncrementAsync } from './sagas'
+import { delay } from 'redux-saga'
+import { put, takeEvery, all } from 'redux-saga/effects'
 
-const store = createStore(
-  reducer,
-  applyMiddleware(createSagaMiddleware(helloSaga, watchIncrementAsync))
-)
+function* helloSaga() {
+  console.log('Hello Sagas!')
+}
 
-//...
+export function* incrementAsync() {
+  yield delay(1000)
+  yield put({ type: 'INCREMENT' })
+}
+
+export function* watchIncrementAsync() {
+  yield takeEvery('INCREMENT_ASYNC', incrementAsync)
+}
+
+// 注意我们是怎样才只暴露`rootSaga`的
+// 单一入口,一次执行所有的Sagas
+export default function* rootSaga() {
+  yield all([
+    helloSaga(),
+    watchIncrementAsync()
+  ])
+}
+
 ```
 
-注意我们不需要连接 `incrementAsync` 这个 Saga，因为它会在每次 `INCREMENT_ASYNC` action 发起时被 `watchIncrementAsync` 动态启动。
+`rootSaga`这个Saga，yield了一个数组，调用了我们两个Saga——`helloSaga`和`wachIncrementAsnyc`。
+意味着这两个generator函数(生成器 函数)同时执行。
+现在，我们只需要在`main.js`里调用`sagaMiddleware.run(rootSaga)`
+
+```js
+// ...
+import rootSaga from './sagas'
+
+const sagaMiddleware = createSagaMiddleware()
+const store = ...
+sagaMiddleware.run(rootSaga)
+
+// ...
+```
 
 
 ## 让我们的代码可测试
