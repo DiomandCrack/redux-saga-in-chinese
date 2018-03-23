@@ -63,19 +63,24 @@ export function* helloSaga() {
 import { createStore, applyMiddleware } from 'redux'
 import createSagaMiddleware from 'redux-saga'
 
-//...
+// ...
 import { helloSaga } from './sagas'
 
+const sagaMiddleware = createSagaMiddleware()
 const store = createStore(
   reducer,
-  applyMiddleware(createSagaMiddleware(helloSaga))
+  applyMiddleware(sagaMiddleware)
 )
+sagaMiddleware.run(helloSaga)
+
+const action = type => store.dispatch({type})
 
 // rest unchanged
 ```
 
 首先我们引入 `./sagas` 模块中的 Saga。然后使用 `redux-saga` 模块的 `createSagaMiddleware` 工厂函数来创建一个 Saga middleware。
-`createSagaMiddleware` 接受 Sagas 列表，这些 Sagas 将会通过创建的 middleware 被立即执行。
+`createSagaMiddleware` 接受 Sagas 列表，执行`helloSaga`之前，我们必须用`applyMiddleware`将我们的中间件`sagaMiddleware`和`store`连接起来。
+然后我们可以使用`sagaMiddleware.run(helloSaga)`执行我们的Saga
 
 
 到目前为止，我们的 Saga 并没做什么特别的事情。它只是打印了一条消息，然后退出。
@@ -126,11 +131,9 @@ function render() {
 添加以下代码到 `sagas.js` 模块：
 
 ```javascript
-import { takeEvery } from 'redux-saga'
-import { put } from 'redux-saga/effects'
+import { delay } from 'redux-saga'
+import { put,takeEvery } from 'redux-saga/effects'
 
-// 一个工具函数：返回一个 Promise，这个 Promise 将在 1 秒后 resolve
-export const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 // Our worker Saga: 将异步执行 increment 任务
 export function* incrementAsync() {
@@ -140,7 +143,7 @@ export function* incrementAsync() {
 
 // Our watcher Saga: 在每个 INCREMENT_ASYNC action 调用后，派生一个新的 incrementAsync 任务
 export function* watchIncrementAsync() {
-  yield* takeEvery('INCREMENT_ASYNC', incrementAsync)
+  yield takeEvery('INCREMENT_ASYNC', incrementAsync)
 }
 ```
 
